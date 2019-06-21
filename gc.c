@@ -23,9 +23,7 @@ typedef struct s_object{
 
 typedef struct s_vm{
     object* stack[MAXNUM];
-    //¶ÔÏóÁ´
     object* head;
-    object* tail;
 
     int max_obj;
     int cur_obj;
@@ -36,7 +34,7 @@ VM* newVM(){
     VM* vm = malloc(sizeof(VM));
     (*vm).size = 0;
     vm->head = NULL;
-    vm->max_obj = 5;
+    vm->max_obj = 8;
     vm->cur_obj = 0;
     return vm;
 }
@@ -45,20 +43,14 @@ void gc(VM* vm);
 
 object* newObject(VM* vm,object_type type){
     if(vm->cur_obj == vm->max_obj){
-        printf("gc...");
+        printf("gc...\n");
         gc(vm);
     }
     object* o = malloc(sizeof(object));
     o->type = type;
-    o->next=NULL;
+    o->next=vm->head;
+    vm->head = o;
     o->marked = 0;
-    if(vm->head==NULL){
-        vm->head = o;
-        vm->tail = o;
-    }else{
-        vm->tail->next = o;
-        vm->tail = o;
-    }
     vm->cur_obj++;
     return o;
 }
@@ -87,10 +79,8 @@ void pushINT(VM* vm,int val){
 
 object* pushOBJ(VM* vm){
     object* o = newObject(vm,OBJECT_OBJ);
-    if(vm->size>0){
-        o->ref = pop(vm);
-        push(vm,o);
-    }
+    o->ref = pop(vm);
+    push(vm,o);
 
     return o;
 }
@@ -106,50 +96,61 @@ void markAll(object* o){
     if(o->marked)
         return;
     o->marked = 1;
-    if(o->type==OBJECT_OBJ && o->ref!=NULL){
+    if(o->type==OBJECT_OBJ){
         markAll(o->ref);
     }
 }
 
 void mark(VM* vm){
     for(int i=0;i<vm->size;i++){
-        if(vm->stack[i]->type == OBJECT_INT){
-            vm->stack[i]-> marked = 1;
-        }else if(vm->stack[i]->type == OBJECT_OBJ){
-            markAll(vm->stack[i]);
-        }
+        markAll(vm->stack[i]);
     }
 }
 
 void sweep(VM* vm){
-    object* first = vm->head;
-    while(first){
-        if(!first->marked){
-            object* unreach = first;
-            first = first->next;
+    object** first = &vm->head;
+    while(*first){
+        if(!(*first)->marked){
+            object* unreach = *first;
+            *first = unreach->next;
             free(unreach);
             vm->cur_obj--;
         }else{
-            first->marked = 0;
-            first = first->next;
+            (*first)->marked = 0;
+            first = &(*first)->next;
         }
     }
 }
+//void sweep(VM* vm){
+//    object* first = vm->head;
+//    while(first){
+//        if(!first->marked){
+//            object* unreach = first;
+//            first = first->next;
+//            free(unreach);
+//            vm->cur_obj--;
+//        }else{
+//            first->marked = 0;
+//            first = first->next;
+//        }
+//    }
+//}
 
 void gc(VM* vm){
     int num = vm->cur_obj;
-//    printf("%d\n",num);
+    //printf("line 133 :%d\n",num);
     mark(vm);
     sweep(vm);
-//    printf("%d\n",vm->cur_obj);
+    //printf("line 136 :%d\n",vm->cur_obj);
 
-    vm->max_obj = num *2;
+    vm->max_obj = vm->cur_obj *2;
     printf("\nCollected %d objects, %d remaining.\n", num - vm->cur_obj,
          vm->cur_obj);
 }
 
 void freeVM(VM* vm){
     vm->size = 0;
+    gc(vm);
     free(vm->stack);
 }
 
@@ -215,18 +216,36 @@ void test4() {
     /* Set up a cycle, and also make 3 and 3 unreachable and collectible. */
     a->ref = b;
     b->ref = a;
-
+    //printf("curObjNum : %d,maxObjNum:%d \n",vm->cur_obj,vm->max_obj);
     gc(vm);
-    if(vm->cur_obj!=4){
+
+    if(vm->cur_obj!=3){
         printf("Should have collected objects.");
     }
     freeVM(vm);
 }
 
+void perfTest() {
+  printf("Performance Test.\n");
+  VM* vm = newVM();
+
+  for (int i = 0; i < 200; i++) {
+    for (int j = 0; j < 5; j++) {
+      pushINT(vm, i);
+    }
+
+    for (int k = 0; k < 5; k++) {
+      pop(vm);
+    }
+  }
+  freeVM(vm);
+}
+
 int main(){
-//    test1();
-//    test2();
+ //   test1();
+ //   test2();
 //    test3();
-    test4();
+//   test4();
+    perfTest();
     return 0;
 }
